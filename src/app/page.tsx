@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getAddress } from "../../get-address";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -17,52 +17,21 @@ type Address = {
   consultedAt: Date;
 };
 
-const initialAddresses: Address[] = [
-  {
-    id: self.crypto.randomUUID(),
-    bairro: "Centro",
-    cep: "01001-000",
-    complemento: "Apto 101",
-    ddd: "11",
-    localidade: "São Paulo",
-    logradouro: "Praça da Sé",
-    uf: "SP",
-    consultedAt: new Date(),
-  },
-  {
-    id: self.crypto.randomUUID(),
-    bairro: "Copacabana",
-    cep: "22041-001",
-    complemento: "Bloco B, Ap 502",
-    ddd: "21",
-    localidade: "Rio de Janeiro",
-    logradouro: "Avenida Atlântica",
-    uf: "RJ",
-    consultedAt: new Date(),
-  },
-  {
-    id: self.crypto.randomUUID(),
-    bairro: "Savassi",
-    cep: "30140-071",
-    complemento: "Loja 3",
-    ddd: "31",
-    localidade: "Belo Horizonte",
-    logradouro: "Rua Pernambuco",
-    uf: "MG",
-    consultedAt: new Date(),
-  },
-  {
-    id: self.crypto.randomUUID(),
-    bairro: "Meireles",
-    cep: "60160-230",
-    complemento: "Casa 10",
-    ddd: "85",
-    localidade: "Fortaleza",
-    logradouro: "Rua Silva Jatahy",
-    uf: "CE",
-    consultedAt: new Date(),
-  },
-];
+// Função para salvar os endereços no localStorage
+function saveAddressesToLocalStorage(addresses: Address[]) {
+  localStorage.setItem("addresses", JSON.stringify(addresses));
+}
+
+// Função para recuperar os endereços do localStorage
+function getAddressesFromLocalStorage(): Address[] {
+  const storedAddresses = localStorage.getItem("addresses");
+  return storedAddresses
+    ? JSON.parse(storedAddresses).map((address: Address) => ({
+        ...address,
+        consultedAt: new Date(address.consultedAt),
+      }))
+    : [];
+}
 
 function formatDate(date: Date) {
   const result = formatDistanceToNow(new Date(date), {
@@ -79,8 +48,14 @@ function isValidCep(cep: string) {
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
-  const [addresses, setAddresses] = useState<Address[]>(initialAddresses);
+  const [addresses, setAddresses] = useState<Address[]>(getAddressesFromLocalStorage());
   const [textValue, setTextValue] = useState("");
+  const [countryCode, setCountryCode] = useState("br");
+
+  useEffect(() => {
+    // Sempre que a lista de endereços mudar, salve novamente no localStorage
+    saveAddressesToLocalStorage(addresses);
+  }, [addresses]);
 
   async function handleGetAddress() {
     if (!isValidCep(textValue)) {
@@ -90,9 +65,15 @@ export default function Home() {
 
     setLoading(true);
     try {
-      const result = await getAddress(textValue);
-      if (result?.erro === "true") {
-        alert("CEP inválido.");
+      const result = await getAddress(textValue, countryCode);
+      if (!result) {
+        alert("CEP inválido ou endereço não encontrado.");
+        return;
+      }
+
+      // Verifica se o endereço realmente foi encontrado
+      if (!result.logradouro || !result.bairro || !result.localidade) {
+        alert("CEP não encontrado ou endereço incompleto.");
         return;
       }
 
@@ -101,6 +82,8 @@ export default function Home() {
         consultedAt: new Date(),
         ...result,
       };
+      
+      // Adiciona o endereço encontrado ao estado
       setAddresses([newAddress, ...addresses]);
     } catch (error) {
       alert("Ocorreu um erro ao obter o endereço.");
@@ -121,8 +104,19 @@ export default function Home() {
         </h1>
 
         <div className="flex flex-col gap-4 bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+          <label className="text-sm text-gray-600">Selecione o país</label>
+          <select
+            value={countryCode}
+            onChange={(e) => setCountryCode(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+          >
+            <option value="br">Brasil</option>
+            <option value="us">Estados Unidos</option>
+          </select>
+
           <label className="text-sm text-gray-600">Digite o CEP</label>
           <input
+            value={textValue}
             onChange={(e) => setTextValue(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
             placeholder="Ex: 01001-000"
